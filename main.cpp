@@ -56,18 +56,9 @@ int main( int argc, char** argv )
       {
         return
           seastar::parallel_for_each(boost::irange<unsigned>(0, seastar::smp::count),
-            [] (unsigned c)
+            [](unsigned c)
             {
-              return
-                seastar::smp::submit_to(
-                  c,
-                  /*[]() -> seastar::future<>
-                  {
-                    std::cout << "Hello world\n";
-                    std::cout << seastar::smp::count << "\n";
-                    co_return;
-                  }*/
-                  service_loop);
+              return seastar::smp::submit_to( c, service_loop );
             });
       });
 }
