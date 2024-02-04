@@ -2,12 +2,21 @@
 #include <seastar/core/reactor.hh>
 #include <iostream>
 
-/*seastar::future<> reply()
+seastar::future<> handle_connection
+(
+  seastar::connected_socket& socket,
+  seastar::socket_address const& address
+)
 {
+  const char* canned_response = "Seastar is the future!\n";
 
-}*/
+  std::cout << "Accepted connection from " << address << "\n";
 
-const char* canned_response = "Seastar is the future!\n";
+  auto out = socket.output();
+
+  co_await out.write(canned_response);
+  co_await out.close();
+}
 
 seastar::future<> service_loop()
 {
@@ -32,13 +41,7 @@ seastar::future<> service_loop()
             [&listener]() -> seastar::future<>
             {
               auto res = co_await listener.accept();
-
-              std::cout << "Accepted connection from " << res.remote_address << "\n";
-
-              auto out = res.connection.output();
-
-              co_await out.write(canned_response);
-              co_await out.close();
+              co_await handle_connection( res.connection, res.remote_address );
             });
       });
 }
