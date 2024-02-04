@@ -41,7 +41,17 @@ seastar::future<> service_loop()
             [&listener]() -> seastar::future<>
             {
               auto res = co_await listener.accept();
-              co_await handle_connection( res.connection, res.remote_address );
+              try
+              {
+                co_await handle_connection( res.connection, res.remote_address );
+              }
+              catch( ... )
+              {
+                fmt::print(
+                  stderr,
+                  "Could not handle connection: {}\n",
+                  std::current_exception());
+              }
             });
       });
 }
