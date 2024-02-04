@@ -29,29 +29,16 @@ seastar::future<> service_loop()
       {
         return
           seastar::keep_doing(
-            [&listener]()
+            [&listener]() -> seastar::future<>
             {
-              return listener.accept().then(
-                [] (seastar::accept_result res)
-                {
-                  std::cout << "Accepted connection from " << res.remote_address << "\n";
+              auto res = co_await listener.accept();
 
-                  auto s = std::move(res.connection);
-                  auto out = s.output();
+              std::cout << "Accepted connection from " << res.remote_address << "\n";
 
-                  return
-                    seastar::do_with(
-                      std::move(s),
-                      std::move(out),
-                      [] (auto& s, auto& out) -> seastar::future<>
-                      {
-                        co_await out.write(canned_response);
+              auto out = res.connection.output();
 
-                        co_await out.close();
-
-                        co_return;
-                      });
-                });
+              co_await out.write(canned_response);
+              co_await out.close();
             });
       });
 }
