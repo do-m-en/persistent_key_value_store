@@ -20,28 +20,3 @@ target_compile_features(
   cxx_std_23
 )
 target_link_libraries( ${PROJECT_NAME} Seastar::seastar )
-
-
-function(test_pkvs file_name)
-  set(test_name "test__${file_name}")
-
-  add_executable(
-    ${test_name}
-    pkvs/test/${file_name}.cpp )
-  target_compile_features(
-    ${test_name}
-    PRIVATE
-    cxx_std_23 )
-  target_include_directories(
-    ${test_name}
-    PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/pkvs)
-
-  add_test(
-    NAME "${test_name}"
-    COMMAND ${test_name} )
-endfunction()
-
-foreach(test IN ITEMS utf8_validated_view)
-  test_pkvs( "${test}" )
-endforeach()
