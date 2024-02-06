@@ -100,11 +100,10 @@ namespace
                           return local_shard.get_item( key );
                         });
 
-                  // TODO return json
                   if( result != std::nullopt )
-                    co_return result.value();
+                    co_return "{\"value\":\"" + result.value() + "\"}";
 
-                  co_return "get error"; // TODO return json
+                  co_return "{\"result\":\"missing\"}";
                 }));
 
             r.add(
@@ -122,20 +121,21 @@ namespace
                   // TODO error handling if "key" doesn't exist
                   size_t shard_no = pkvs::key_to_shard_no( data["key"].template get<std::string_view>() );
 
-                  co_return
-                    co_await
-                      store.invoke_on(
-                        shard_no,
-                        [
-                          key = data["key"].template get<std::string_view>(),
-                          value = data["value"].template get<std::string_view>()
-                        ]
-                        (
-                          pkvs::pkvs_shard& local_shard
-                        )
-                        {
-                          return local_shard.insert_item( key, value );
-                        });
+                  co_await
+                    store.invoke_on(
+                      shard_no,
+                      [
+                        key = data["key"].template get<std::string_view>(),
+                        value = data["value"].template get<std::string_view>()
+                      ]
+                      (
+                        pkvs::pkvs_shard& local_shard
+                      )
+                      {
+                        return local_shard.insert_item( key, value );
+                      });
+
+                  co_return "{\"result\":\"ok\"}";
                 }));
 
             r.add(
@@ -153,17 +153,18 @@ namespace
                   // TODO error handling if "key" doesn't exist
                   size_t shard_no = pkvs::key_to_shard_no( data["key"].template get<std::string_view>() );
 
-                  co_return
-                    co_await
-                      store.invoke_on(
-                        shard_no,
-                        [key = data["key"].template get<std::string_view>()]
-                        (
-                          pkvs::pkvs_shard& local_shard
-                        )
-                        {
-                          return local_shard.delete_item( key );
-                        });
+                  co_await
+                    store.invoke_on(
+                      shard_no,
+                      [key = data["key"].template get<std::string_view>()]
+                      (
+                        pkvs::pkvs_shard& local_shard
+                      )
+                      {
+                        return local_shard.delete_item( key );
+                      });
+
+                  co_return "{\"result\":\"ok\"}";
                 }));
           });
 
