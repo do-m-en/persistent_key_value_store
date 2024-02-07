@@ -12,8 +12,11 @@ namespace pkvs
   public:
     pkvs_t( size_t instance_no );
 
+    // contract: assert( key.empty() == false && key.size() < 256 );
     seastar::future<std::optional<std::string>> get_item( std::string_view key ) const;
+    // contract: assert( key.empty() == false && key.size() < 256 );
     seastar::future<> insert_item( std::string_view key, std::string_view value );
+    // contract: assert( key.empty() == false && key.size() < 256 );
     seastar::future<> delete_item( std::string_view key );
 
   private:

@@ -8,6 +8,9 @@
 #include <nlohmann/json.hpp>
 
 #include <expected>
+#include <string>
+#include <string_view>
+#include <tuple>
 
 #include "pkvs/pkvs_shard.hpp"
 
@@ -75,20 +78,54 @@ namespace
         .set_routes(
           [ &store ]( seastar::httpd::routes& r )
           {
+            auto common_request_processing =
+              []( seastar::http::request& req )
+                ->
+                  std::expected
+                  <
+                    std::tuple
+                    <
+                      nlohmann::json,
+                      size_t
+                    >,
+                    std::string
+                  >
+              {
+                  // FIXME server-side deprecated: use content_stream instead
+                  // throws if data is not in utf-8 format
+                  try
+                  {
+                    nlohmann::json data = nlohmann::json::parse( req.content.c_str() );
+
+                    auto key = data["key"].template get<std::string_view>();
+
+                    if( key.empty() || key.size() > 256 )
+                      return std::unexpected("{\"result\":\"invalid key size\"}");
+
+                    size_t shard_no = pkvs::key_to_shard_no( key );
+
+                    return std::tuple{ std::move( data ), shard_no };
+                  }
+                  catch( ... )
+                  {
+                    return std::unexpected("{\"result\":\"request error\"}");
+                  }
+              };
             r.add(
               seastar::httpd::operation_type::GET,
               seastar::httpd::url("/get"),
               new seastar::httpd::function_handler(
-                [ &store ]( std::unique_ptr<seastar::http::request> req ) -> seastar::future<seastar::json::json_return_type>
+                [ &store, common_request_processing ]
+                (
+                  std::unique_ptr<seastar::http::request> req
+                ) -> seastar::future<seastar::json::json_return_type>
                 {
-                  // TODO try-catch as we don't want json exception to run away...
+                  auto processed = common_request_processing( *req );
 
-                  // FIXME server-side deprecated: use content_stream instead
-                  // throws if data is not in utf-8 format
-                  nlohmann::json data = nlohmann::json::parse( req->content.c_str() );
+                  if( processed.has_value() == false )
+                    co_return processed.error();
 
-                  // TODO error handling if "key" doesn't exist
-                  size_t shard_no = pkvs::key_to_shard_no( data["key"].template get<std::string_view>() );
+                  auto const& [ data, shard_no ] = *processed;
 
                   auto result =
                     co_await
@@ -112,16 +149,17 @@ namespace
               seastar::httpd::operation_type::POST,
               seastar::httpd::url("/post"),
               new seastar::httpd::function_handler(
-                [ &store ]( std::unique_ptr<seastar::http::request> req ) -> seastar::future<seastar::json::json_return_type>
+                [ &store, common_request_processing ]
+                (
+                  std::unique_ptr<seastar::http::request> req
+                ) -> seastar::future<seastar::json::json_return_type>
                 {
-                  // TODO try-catch as we don't want json exception to run away...
+                  auto processed = common_request_processing( *req );
 
-                  // FIXME server-side deprecated: use content_stream instead
-                  // throws if data is not in utf-8 format
-                  nlohmann::json data = nlohmann::json::parse( req->content.c_str() );
+                  if( processed.has_value() == false )
+                    co_return processed.error();
 
-                  // TODO error handling if "key" doesn't exist
-                  size_t shard_no = pkvs::key_to_shard_no( data["key"].template get<std::string_view>() );
+                  auto const& [ data, shard_no ] = *processed;
 
                   co_await
                     store.invoke_on(
@@ -144,16 +182,17 @@ namespace
               seastar::httpd::operation_type::POST,
               seastar::httpd::url("/delete"),
               new seastar::httpd::function_handler(
-                [ &store ]( std::unique_ptr<seastar::http::request> req ) -> seastar::future<seastar::json::json_return_type>
+                [ &store, common_request_processing ]
+                (
+                  std::unique_ptr<seastar::http::request> req
+                ) -> seastar::future<seastar::json::json_return_type>
                 {
-                  // TODO try-catch as we don't want json exception to run away...
+                  auto processed = common_request_processing( *req );
 
-                  // FIXME server-side deprecated: use content_stream instead
-                  // throws if data is not in utf-8 format
-                  nlohmann::json data = nlohmann::json::parse( req->content.c_str() );
+                  if( processed.has_value() == false )
+                    co_return processed.error();
 
-                  // TODO error handling if "key" doesn't exist
-                  size_t shard_no = pkvs::key_to_shard_no( data["key"].template get<std::string_view>() );
+                  auto const& [ data, shard_no ] = *processed;
 
                   co_await
                     store.invoke_on(

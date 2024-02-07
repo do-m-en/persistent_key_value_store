@@ -16,6 +16,8 @@ pkvs_t::pkvs_t( size_t instance_no )
 
 seastar::future<std::optional<std::string>> pkvs_t::get_item( std::string_view key ) const
 {
+  assert( key.empty() == false && key.size() < 256 );
+
   auto& index = memtable_.get< key_index >();
 
   if
@@ -33,6 +35,8 @@ seastar::future<std::optional<std::string>> pkvs_t::get_item( std::string_view k
 
 seastar::future<> pkvs_t::insert_item( std::string_view key, std::string_view value )
 {
+  assert( key.empty() == false && key.size() < 256 );
+
   auto& index = memtable_.get< key_index >();
 
   index.insert( entry_t{ key, value, true } );
@@ -42,6 +46,8 @@ seastar::future<> pkvs_t::insert_item( std::string_view key, std::string_view va
 
 seastar::future<> pkvs_t::delete_item( std::string_view key )
 {
+  assert( key.empty() == false && key.size() < 256 );
+
   auto& index = memtable_.get< key_index >();
 
   index.insert( entry_t::make_tombstone( key ) );
