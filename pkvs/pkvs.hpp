@@ -2,6 +2,7 @@
 #define PKVS_HPP_INCLUDED
 
 #include <seastar/core/future.hh>
+#include <string_view>
 #include "detail/memtable.hpp"
 
 namespace pkvs

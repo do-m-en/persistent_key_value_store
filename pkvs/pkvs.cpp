@@ -1,5 +1,8 @@
 #include "pkvs.hpp"
 
+#include <cassert>
+#include <filesystem>
+
 using namespace pkvs;
 
 pkvs_t::pkvs_t( size_t instance_no )

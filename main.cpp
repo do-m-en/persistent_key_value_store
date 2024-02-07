@@ -7,6 +7,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <expected>
+
 #include "pkvs/pkvs_shard.hpp"
 
 #include <iostream>
