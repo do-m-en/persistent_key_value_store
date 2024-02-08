@@ -14,7 +14,7 @@ pkvs_t::pkvs_t( size_t instance_no )
   );
 }
 
-seastar::future<std::optional<std::string>> pkvs_t::get_item( std::string_view key ) const
+seastar::future<std::optional<std::string>> pkvs_t::get_item( std::string_view key )
 {
   assert( key.empty() == false && key.size() < 256 );
 
@@ -26,6 +26,7 @@ seastar::future<std::optional<std::string>> pkvs_t::get_item( std::string_view k
     found != index.end() && (*found).type != entry_type_t::tombstone
   )
   {
+    index.modify( found, []( auto& item ){ item.bump_last_access_time(); });
     // TODO support for not loaded values
     return seastar::make_ready_future<std::optional<std::string>>( (*found).content );
   }

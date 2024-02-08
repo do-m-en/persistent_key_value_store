@@ -53,7 +53,7 @@ namespace pkvs
       return seastar::make_ready_future<>();
     }
 
-    seastar::future<std::optional<std::string>> get_item( std::string_view key ) const
+    seastar::future<std::optional<std::string>> get_item( std::string_view key )
     {
       co_return co_await instances_[ key_to_index( key ) ].get_item( key );
     }

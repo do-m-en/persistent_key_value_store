@@ -50,6 +50,11 @@ namespace pkvs
     // copies are needed because boost multiindex doesn't support move...
 
     bool operator<( entry_t const& e ) const { return key < e.key; }
+
+    void bump_last_access_time()
+    {
+      last_accessed = std::chrono::steady_clock::now();
+    }
   };
 
   struct key_index;
