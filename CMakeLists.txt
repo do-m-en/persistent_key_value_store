@@ -38,7 +38,19 @@ target_link_libraries(
   nlohmann_json::nlohmann_json
 )
 
-foreach( test IN ITEMS add add_value_missing delete delete_non_existing update )
+foreach(
+  test
+
+  IN ITEMS
+
+  add
+  add_value_missing
+  delete
+  delete_non_existing
+  sorted_keys
+  sorted_keys_after_delete
+  sorted_keys_empty
+  update )
   add_test(
     NAME ${test}
     COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/pkvs/tests/${test}.sh"

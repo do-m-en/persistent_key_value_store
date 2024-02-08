@@ -2,6 +2,9 @@
 #define PKVS_HPP_INCLUDED
 
 #include <seastar/core/future.hh>
+#include <optional>
+#include <set>
+#include <string>
 #include <string_view>
 #include "detail/memtable.hpp"
 
@@ -18,6 +21,7 @@ namespace pkvs
     seastar::future<> insert_item( std::string_view key, std::string_view value );
     // contract: assert( key.empty() == false && key.size() < 256 );
     seastar::future<> delete_item( std::string_view key );
+    seastar::future<std::set<std::string>> sorted_keys();
 
   private:
     size_t instance_no_;

@@ -1,6 +1,7 @@
 #include <seastar/core/app-template.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/reactor.hh> // seastar::condition_variable
+#include <seastar/coroutine/parallel_for_each.hh>
 #include <seastar/http/function_handlers.hh>
 #include <seastar/http/httpd.hh>
 #include <seastar/http/routes.hh>
@@ -8,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include <expected>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -229,6 +231,53 @@ namespace
                       });
 
                   co_return "{\"result\":\"ok\"}";
+                }));
+
+            r.add(
+              seastar::httpd::operation_type::GET,
+              seastar::httpd::url("/sorted_keys"),
+              new seastar::httpd::function_handler(
+                [ &store, common_request_processing ]
+                (
+                  std::unique_ptr<seastar::http::request> req
+                ) -> seastar::future<seastar::json::json_return_type>
+                {
+                  std::set< std::string > keys;
+
+                  try
+                  {
+                    co_await seastar::coroutine::parallel_for_each(
+                      std::views::iota( 0u, seastar::smp::count ),
+                      [ &store, &keys ]( size_t shard_no ) -> seastar::future<>
+                      {
+                        keys.merge(
+                          co_await
+                            store.invoke_on(
+                              shard_no,
+                              []( pkvs::pkvs_shard& local_shard )
+                              {
+                                return local_shard.sorted_keys();
+                              }));
+                      });
+                  }
+                  catch( ... )
+                  {
+                    std::cerr << "keys failed: " << std::current_exception() << '\n';
+
+                    co_return "{\"result\":\"internal server error\"}";
+                  }
+
+                  std::string result{ "{\"keys\":[" };
+
+                  for( auto const& key : keys )
+                    result += '"' + key + "\",";
+
+                  if( keys.empty() == false )
+                    result.pop_back();
+
+                  result += "]}";
+
+                  co_return result;
                 }));
           });
 

@@ -60,3 +60,17 @@ seastar::future<> pkvs_t::delete_item( std::string_view key )
 
   return seastar::make_ready_future<>();
 }
+
+seastar::future<std::set<std::string>> pkvs_t::sorted_keys()
+{
+  std::set<std::string> keys;
+
+  // TODO support for not loaded keys
+  for( auto const& item : memtable_.get< key_index >() )
+  {
+    if( item.type != entry_type_t::tombstone )
+      keys.insert( item.key );
+  }
+
+  return seastar::make_ready_future<std::set<std::string>>( keys );
+}

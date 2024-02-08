@@ -2,6 +2,7 @@
 #define PKVS_SHARD_HPP_INCLUDED
 
 #include <seastar/core/future.hh>
+#include <seastar/coroutine/parallel_for_each.hh>
 
 #include <cassert>
 #include <string_view>
@@ -66,6 +67,20 @@ namespace pkvs
     seastar::future<> delete_item( std::string_view key )
     {
       co_return co_await instances_[ key_to_index( key ) ].delete_item( key );
+    }
+
+    seastar::future<std::set<std::string>> sorted_keys()
+    {
+      std::set<std::string> keys;
+
+      co_await seastar::coroutine::parallel_for_each(
+        instances_,
+        [ &keys ]( pkvs_t& pkvs ) -> seastar::future<>
+        {
+          keys.merge( co_await pkvs.sorted_keys() );
+        });
+
+      co_return keys;
     }
 
   private:
