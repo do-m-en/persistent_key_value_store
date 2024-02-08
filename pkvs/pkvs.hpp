@@ -3,6 +3,7 @@
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
+#include <chrono>
 #include <optional>
 #include <set>
 #include <string>
@@ -15,7 +16,7 @@ namespace pkvs
   class pkvs_t
   {
   public:
-    pkvs_t( size_t instance_no );
+    pkvs_t( size_t instance_no, size_t memtable_memory_footprint_eviction_threshold );
 
     // contract: assert( key.empty() == false && key.size() < 256 );
     seastar::future<std::optional<std::string>> get_item( std::string_view key );
@@ -34,7 +35,10 @@ namespace pkvs
 
   private:
     memtable_t memtable_;
+    size_t memtable_memory_footprint_eviction_threshold_;
     size_t approximate_memtable_memory_footprint_; // in bytes
+    std::chrono::time_point<std::chrono::system_clock> last_persist_time_;
+    bool has_dirty_ = false;
     sstables_t sstables_;
   };
 }

@@ -1,6 +1,7 @@
 #include <seastar/core/app-template.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/reactor.hh> // seastar::condition_variable
+#include <seastar/core/sleep.hh>
 #include <seastar/coroutine/parallel_for_each.hh>
 #include <seastar/http/function_handlers.hh>
 #include <seastar/http/httpd.hh>
@@ -57,17 +58,22 @@ namespace
     seastar::condition_variable cv_;
   };
 
-  seastar::future<> service_loop( uint16_t port )
+  seastar::future<> service_loop
+  (
+    uint16_t port,
+    size_t memtable_memory_footprint_eviction_threshold
+  )
   {
+    stop_signal signal;
     seastar::sharded< pkvs::pkvs_shard > store;
 
     std::cout << "running on: " << seastar::smp::count << '\n';
 
     co_await store.start();
     co_await store.invoke_on_all(
-      []( pkvs::pkvs_shard& local_shard )
+      [ memtable_memory_footprint_eviction_threshold ]( pkvs::pkvs_shard& local_shard )
       {
-        return local_shard.run();
+        return local_shard.run( memtable_memory_footprint_eviction_threshold );
       });
 
     seastar::httpd::http_server_control http_server;
@@ -285,7 +291,23 @@ namespace
     co_await http_server.listen(seastar::ipv4_addr("0.0.0.0", port));
     std::cout << "listening\n";
 
-    co_await stop_signal{}.wait();
+    while( signal.stopping() == false )
+    {
+      co_await seastar::sleep( std::chrono::seconds( 1 ) );
+
+      co_await seastar::coroutine::parallel_for_each(
+        std::views::iota( 0u, seastar::smp::count ),
+        [ &store ]( size_t shard_no ) -> seastar::future<>
+        {
+          co_await
+            store.invoke_on(
+              shard_no,
+              []( pkvs::pkvs_shard& local_shard )
+              {
+                return local_shard.housekeeping();
+              });
+        });
+    }
 
     std::cout << "shutting down\n";
     co_await http_server.stop(); // TODO RAII
@@ -301,6 +323,10 @@ int main( int argc, char** argv )
     "port,p",
     boost::program_options::value<uint16_t>()->default_value( 8080 ),
     "HTTP Server port");
+  app.add_options()(
+    "memory_threshold,t",
+    boost::program_options::value<size_t>()->default_value( 100000000 ),
+    "HTTP Server port");
 
   try
   {
@@ -310,7 +336,10 @@ int main( int argc, char** argv )
       [ &app ]
       {
         auto&& configuration = app.configuration();
-        return service_loop( configuration["port"].as<uint16_t>() );
+        return
+          service_loop(
+            configuration["port"].as<uint16_t>(),
+            configuration["memory_threshold"].as<size_t>() );
       });
   }
   catch (...)

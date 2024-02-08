@@ -5,8 +5,10 @@
 
 using namespace pkvs;
 
-pkvs_t::pkvs_t( size_t instance_no )
-  : sstables_{ std::filesystem::current_path() / "pkvs_data" / std::to_string( instance_no ) }
+pkvs_t::pkvs_t( size_t instance_no, size_t memtable_memory_footprint_eviction_threshold )
+  : memtable_memory_footprint_eviction_threshold_{ memtable_memory_footprint_eviction_threshold }
+  , last_persist_time_{ std::chrono::system_clock::now() }
+  , sstables_{ std::filesystem::current_path() / "pkvs_data" / std::to_string( instance_no ) }
 {}
 
 seastar::future<std::optional<std::string>> pkvs_t::get_item( std::string_view key )
@@ -46,6 +48,8 @@ seastar::future<> pkvs_t::insert_item( std::string_view key, std::string_view va
 {
   assert( key.empty() == false && key.size() < 256 );
 
+  has_dirty_ = true;
+
   auto& index = memtable_.get< key_index >();
 
   if( auto found = index.find( entry_t{ key } ); found != index.end() )
@@ -67,6 +71,8 @@ seastar::future<> pkvs_t::insert_item( std::string_view key, std::string_view va
 seastar::future<> pkvs_t::delete_item( std::string_view key )
 {
   assert( key.empty() == false && key.size() < 256 );
+
+  has_dirty_ = true;
 
   auto& index = memtable_.get< key_index >();
 
@@ -104,5 +110,46 @@ seastar::future<std::set<std::string>> pkvs_t::sorted_keys()
 
 seastar::future<> pkvs_t::housekeeping()
 {
-  return seastar::make_ready_future<>();
+  using namespace std::literals;
+
+  if
+  (
+    approximate_memtable_memory_footprint_ > memtable_memory_footprint_eviction_threshold_ ||
+    std::chrono::system_clock::now() > last_persist_time_ + 20s
+  )
+  {
+    if( has_dirty_ )
+    {
+      std::vector<sstable_item_t> items;
+
+      auto& index = memtable_.get< key_index >();
+
+      for( auto it = index.begin(); it != index.end(); ++it )
+      {
+        auto const& item = *it;
+
+        if( item.dirty )
+        {
+          items.emplace_back( item.key, item.content );
+          index.modify( it, []( auto& item ){ item.dirty = false; } );
+        }
+      }
+
+      has_dirty_ = false;
+
+      co_await sstables_.store( items );
+    }
+
+    /* TODO uncomment once persistency is implemented
+    while( approximate_memtable_memory_footprint_ > memtable_memory_footprint_eviction_threshold_ )
+    {
+      auto& index = memtable_.get< last_accessed_index >();
+
+      auto first = index.begin();
+
+      approximate_memtable_memory_footprint_ -= first->key.size() + first->content.size();
+
+      memtable_.erase( memtable_.iterator_to( *first ) );
+    }*/
+  }
 }

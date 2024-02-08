@@ -33,7 +33,7 @@ namespace pkvs
   class pkvs_shard
   {
   public:
-    seastar::future<> run()
+    seastar::future<> run( size_t memtable_memory_footprint_eviction_threshold )
     {
       for
       (
@@ -42,7 +42,7 @@ namespace pkvs
         i += seastar::smp::count
       )
       {
-        instances_.push_back( pkvs_t{ i } );
+        instances_.push_back( pkvs_t{ i, memtable_memory_footprint_eviction_threshold } );
       }
 
       return seastar::make_ready_future<>();
@@ -80,6 +80,17 @@ namespace pkvs
         });
 
       co_return keys;
+    }
+
+    seastar::future<> housekeeping()
+    {
+      return
+        seastar::parallel_for_each(
+          instances_,
+          []( pkvs_t& pkvs ) -> seastar::future<>
+          {
+            return pkvs.housekeeping();
+          });
     }
 
   private:
