@@ -39,7 +39,10 @@ seastar::future<> pkvs_t::insert_item( std::string_view key, std::string_view va
 
   auto& index = memtable_.get< key_index >();
 
-  index.insert( entry_t{ key, value, true } );
+  if( auto found = index.find( entry_t{ key } ); found != index.end() )
+    index.replace( found, entry_t{ key, value, true } );
+  else
+    index.insert( entry_t{ key, value, true } );
 
   return seastar::make_ready_future<>();
 }
@@ -50,7 +53,10 @@ seastar::future<> pkvs_t::delete_item( std::string_view key )
 
   auto& index = memtable_.get< key_index >();
 
-  index.insert( entry_t::make_tombstone( key ) );
+  if( auto found = index.find( entry_t{ key } ); found != index.end() )
+    index.replace( found, entry_t::make_tombstone( key ) );
+  else
+    index.insert( entry_t::make_tombstone( key ) );
 
   return seastar::make_ready_future<>();
 }

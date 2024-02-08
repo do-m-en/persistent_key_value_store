@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <unordered_set>
 
 #include "pkvs/pkvs_shard.hpp"
 
@@ -79,7 +80,11 @@ namespace
           [ &store ]( seastar::httpd::routes& r )
           {
             auto common_request_processing =
-              []( seastar::http::request& req )
+              []
+              (
+                seastar::http::request& req,
+                std::unordered_set< std::string > expected_keys
+              )
                 ->
                   std::expected
                   <
@@ -96,6 +101,24 @@ namespace
                   try
                   {
                     nlohmann::json data = nlohmann::json::parse( req.content.c_str() );
+
+                    if( expected_keys.contains( "key" ) == false )
+                      return std::unexpected("{\"result\":\"internal server error\"}");
+
+                    for( auto& [key, val] : data.items() )
+                    {
+                      if
+                      (
+                        expected_keys.erase( key ) == 0 ||
+                        val.type() != nlohmann::json::value_t::string
+                      )
+                      {
+                        return std::unexpected("{\"result\":\"request error\"}");
+                      }
+                    }
+
+                    if( expected_keys.empty() == false )
+                      return std::unexpected("{\"result\":\"request error\"}");
 
                     auto key = data["key"].template get<std::string_view>();
 
@@ -120,7 +143,7 @@ namespace
                   std::unique_ptr<seastar::http::request> req
                 ) -> seastar::future<seastar::json::json_return_type>
                 {
-                  auto processed = common_request_processing( *req );
+                  auto processed = common_request_processing( *req, { "key" } );
 
                   if( processed.has_value() == false )
                     co_return processed.error();
@@ -154,7 +177,7 @@ namespace
                   std::unique_ptr<seastar::http::request> req
                 ) -> seastar::future<seastar::json::json_return_type>
                 {
-                  auto processed = common_request_processing( *req );
+                  auto processed = common_request_processing( *req, { "key", "value" } );
 
                   if( processed.has_value() == false )
                     co_return processed.error();
@@ -187,7 +210,7 @@ namespace
                   std::unique_ptr<seastar::http::request> req
                 ) -> seastar::future<seastar::json::json_return_type>
                 {
-                  auto processed = common_request_processing( *req );
+                  auto processed = common_request_processing( *req, { "key" } );
 
                   if( processed.has_value() == false )
                     co_return processed.error();
@@ -209,8 +232,9 @@ namespace
                 }));
           });
 
-    std::cout << "listening on port " << port << '\n';
+    std::cout << "try listening on port " << port << '\n';
     co_await http_server.listen(seastar::ipv4_addr("0.0.0.0", port));
+    std::cout << "listening\n";
 
     co_await stop_signal{}.wait();
 

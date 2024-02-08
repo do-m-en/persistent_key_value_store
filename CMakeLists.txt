@@ -37,3 +37,11 @@ target_link_libraries(
   Seastar::seastar
   nlohmann_json::nlohmann_json
 )
+
+foreach( test IN ITEMS add add_value_missing delete delete_non_existing update )
+  add_test(
+    NAME ${test}
+    COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/pkvs/tests/${test}.sh"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  )
+endforeach()
