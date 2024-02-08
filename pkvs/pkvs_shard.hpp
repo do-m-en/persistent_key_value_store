@@ -58,7 +58,6 @@ namespace pkvs
       co_return co_await instances_[ key_to_index( key ) ].get_item( key );
     }
 
-    // return true if new item, false on update of existing item
     seastar::future<> insert_item( std::string_view key, std::string_view value )
     {
       co_return co_await instances_[ key_to_index( key ) ].insert_item( key, value );
