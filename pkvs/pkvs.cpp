@@ -36,6 +36,7 @@ seastar::future<std::optional<std::string>> pkvs_t::get_item( std::string_view k
       auto& index = memtable_.get< key_index >();
 
       index.insert( entry_t{ key, item.value(), false } );
+      approximate_memtable_memory_footprint_ += key.size() + item.value().size();
 
       co_return item;
     }
@@ -130,7 +131,11 @@ seastar::future<> pkvs_t::housekeeping()
 
         if( item.dirty )
         {
-          items.emplace_back( item.key, item.content );
+          if( item.type == entry_type_t::tombstone )
+            items.emplace_back( item.key, std::nullopt );
+          else
+            items.emplace_back( item.key, item.content );
+
           index.modify( it, []( auto& item ){ item.dirty = false; } );
         }
       }
@@ -140,7 +145,6 @@ seastar::future<> pkvs_t::housekeeping()
       co_await sstables_.store( items );
     }
 
-    /* TODO uncomment once persistency is implemented
     while( approximate_memtable_memory_footprint_ > memtable_memory_footprint_eviction_threshold_ )
     {
       auto& index = memtable_.get< last_accessed_index >();
@@ -150,6 +154,6 @@ seastar::future<> pkvs_t::housekeeping()
       approximate_memtable_memory_footprint_ -= first->key.size() + first->content.size();
 
       memtable_.erase( memtable_.iterator_to( *first ) );
-    }*/
+    }
   }
 }
