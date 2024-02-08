@@ -6,13 +6,8 @@
 using namespace pkvs;
 
 pkvs_t::pkvs_t( size_t instance_no )
-  : instance_no_{ instance_no }
-{
-  std::filesystem::create_directories
-  (
-    std::filesystem::current_path() / "pkvs_data" / std::to_string( instance_no_ )
-  );
-}
+  : sstables_{ std::filesystem::current_path() / "pkvs_data" / std::to_string( instance_no ) }
+{}
 
 seastar::future<std::optional<std::string>> pkvs_t::get_item( std::string_view key )
 {
@@ -23,15 +18,29 @@ seastar::future<std::optional<std::string>> pkvs_t::get_item( std::string_view k
   if
   (
     auto found = index.find( entry_t{ key } );
-    found != index.end() && (*found).type != entry_type_t::tombstone
+    found != index.end() && found->type != entry_type_t::tombstone
   )
   {
     index.modify( found, []( auto& item ){ item.bump_last_access_time(); });
-    // TODO support for not loaded values
-    return seastar::make_ready_future<std::optional<std::string>>( (*found).content );
+
+    co_return found->content;
+  }
+  else
+  {
+    auto item = co_await sstables_.get_item( key );
+
+    if( item != std::nullopt )
+    {
+      auto& index = memtable_.get< key_index >();
+
+      index.insert( entry_t{ key, item.value(), false } );
+
+      co_return item;
+    }
+
   }
 
-  return seastar::make_ready_future<std::optional<std::string>>( std::nullopt );
+  co_return std::nullopt;
 }
 
 seastar::future<> pkvs_t::insert_item( std::string_view key, std::string_view value )
@@ -41,9 +50,17 @@ seastar::future<> pkvs_t::insert_item( std::string_view key, std::string_view va
   auto& index = memtable_.get< key_index >();
 
   if( auto found = index.find( entry_t{ key } ); found != index.end() )
+  {
+    approximate_memtable_memory_footprint_ -= found->content.size();
     index.replace( found, entry_t{ key, value, true } );
+  }
   else
+  {
     index.insert( entry_t{ key, value, true } );
+    approximate_memtable_memory_footprint_ += key.size();
+  }
+
+  approximate_memtable_memory_footprint_ += value.size();
 
   return seastar::make_ready_future<>();
 }
@@ -55,23 +72,38 @@ seastar::future<> pkvs_t::delete_item( std::string_view key )
   auto& index = memtable_.get< key_index >();
 
   if( auto found = index.find( entry_t{ key } ); found != index.end() )
+  {
+    approximate_memtable_memory_footprint_ -= found->content.size();
     index.replace( found, entry_t::make_tombstone( key ) );
+  }
   else
+  {
     index.insert( entry_t::make_tombstone( key ) );
+    approximate_memtable_memory_footprint_ += key.size();
+  }
 
   return seastar::make_ready_future<>();
 }
 
 seastar::future<std::set<std::string>> pkvs_t::sorted_keys()
 {
-  std::set<std::string> keys;
+  // FIXME race condition because of co_await (housekeeping can already evict
+  //       some keys while we're reading and then they are missing in memtable_)
+  //       prevent the race... introduce semaphor or something
+  std::set<std::string> keys = co_await sstables_.sorted_keys();
 
-  // TODO support for not loaded keys
   for( auto const& item : memtable_.get< key_index >() )
   {
-    if( item.type != entry_type_t::tombstone )
+    if( item.type == entry_type_t::tombstone )
+      keys.erase( item.key );
+    else
       keys.insert( item.key );
   }
 
-  return seastar::make_ready_future<std::set<std::string>>( keys );
+  co_return keys;
+}
+
+seastar::future<> pkvs_t::housekeeping()
+{
+  return seastar::make_ready_future<>();
 }

@@ -25,6 +25,7 @@ find_package(
 add_executable(
   ${PROJECT_NAME}
   pkvs/pkvs.cpp
+  pkvs/detail/sstables.cpp
   main.cpp
 )
 target_compile_features(

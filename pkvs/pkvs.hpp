@@ -1,12 +1,14 @@
 #ifndef PKVS_HPP_INCLUDED
 #define PKVS_HPP_INCLUDED
 
+#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <optional>
 #include <set>
 #include <string>
 #include <string_view>
 #include "detail/memtable.hpp"
+#include "detail/sstables.hpp"
 
 namespace pkvs
 {
@@ -23,9 +25,17 @@ namespace pkvs
     seastar::future<> delete_item( std::string_view key );
     seastar::future<std::set<std::string>> sorted_keys();
 
+    // takes care of writes of data to disk etc. and should be called periodically
+    seastar::future<> housekeeping();
+    size_t approximate_memtable_memory_footprint() const
+    {
+      return approximate_memtable_memory_footprint_;
+    }
+
   private:
-    size_t instance_no_;
     memtable_t memtable_;
+    size_t approximate_memtable_memory_footprint_; // in bytes
+    sstables_t sstables_;
   };
 }
 

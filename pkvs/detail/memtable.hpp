@@ -16,7 +16,7 @@ namespace pkvs
   {
     tombstone,
     value,
-    pointer
+    pointer // TODO implement (key is in memory but value has to be loaded from external storage)
   };
 
   struct entry_t
