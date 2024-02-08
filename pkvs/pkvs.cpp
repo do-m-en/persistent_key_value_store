@@ -37,7 +37,6 @@ seastar::future<std::optional<std::string>> pkvs_t::get_item( std::string_view k
 
       co_return item;
     }
-
   }
 
   co_return std::nullopt;
