@@ -8,6 +8,7 @@
 #include <map>
 #include <ranges>
 #include <span>
+#include <sstream>
 
 using namespace pkvs;
 
@@ -54,8 +55,6 @@ sstables_t::sstables_t( std::filesystem::path base_path )
 
 seastar::future<std::optional<std::string>> sstables_t::get_item( std::string_view key )
 {
-  // TODO implement using seastar file io
-
   for( bool found = false; auto current : sstables_ | std::views::reverse )
   {
     auto in_ss_table_file =
@@ -112,18 +111,33 @@ seastar::future<std::optional<std::string>> sstables_t::get_item( std::string_vi
       if( static_cast<entry_type>( type ) == entry_type::tombstone )
         break;
 
-      std::ifstream value_file
-      {
-        base_path_ / "values" / file_name_from_key( key )
-      };
-      value_file.seekg(0, std::ios::end);
-      size_t size = value_file.tellg();
-      std::optional<std::string> buffer{ std::string( size, ' ' ) };
-      value_file.seekg(0);
-      value_file.read(buffer.value().data(), size);
-      value_file.close();
+      auto in_file =
+        co_await seastar::open_file_dma
+        (
+          ( base_path_ / "values" / file_name_from_key( key ) ).native(),
+          seastar::open_flags::ro
+        );
+      auto in_stream = seastar::make_file_input_stream( in_file );
 
-      co_return buffer;
+      std::stringstream input;
+
+
+      co_await
+        [ & ] -> seastar::future<>
+        {
+          while( true )
+          {
+            auto read = co_await in_stream.read();
+
+            if( read.size() == 0 )
+              co_return;
+
+            input.write( read.get(), read.size() );
+          }
+        }()
+        .finally( [ & ]{ return in_stream.close(); } );
+
+      co_return input.str();
     }
   }
 
@@ -132,36 +146,51 @@ seastar::future<std::optional<std::string>> sstables_t::get_item( std::string_vi
 
 seastar::future<std::set<std::string>> sstables_t::sorted_keys()
 {
-  // TODO implement using seastar file io
-
   std::map< std::string, entry_type > keys;
 
   for( auto current : sstables_ )
   {
-    std::ifstream file
-    {
-      base_path_ / std::to_string( current ),
-      std::ios::binary
-    };
+    auto in_ss_table_file =
+      co_await seastar::open_file_dma
+      (
+        ( base_path_ / std::to_string( current ) ).native(),
+        seastar::open_flags::ro
+      );
+    auto in_sstable_stream = seastar::make_file_input_stream( in_ss_table_file );
 
-    std::string buffer( 256, ' ' );
+    co_await
+      [ & ] -> seastar::future<>
+      {
+        while( true )
+        {
+          auto read = co_await in_sstable_stream.read_up_to( entry_size );
 
-    file.seekg (0, std::ios::end);
-    auto length = file.tellg();
-    file.seekg (0, std::ios::beg);
+          if( read.size() == 0 )
+            co_return;
+          else if( read.size() != entry_size )
+          {
+            std::raise( SIGKILL );
 
-    while( file.tellg() < length )
-    {
-      uint64_t size;
-      file.read( reinterpret_cast<char*>( &size ), sizeof( size ) );
-      file.read( buffer.data(), 256 );
-      uint32_t type;
-      file.read( reinterpret_cast<char*>( &type ), sizeof( type ) );
+            throw
+              std::runtime_error
+              (
+                "sstables file corruption detected in " +
+                ( base_path_ / std::to_string( current ) ).native()
+              );
+          }
 
-      keys[ buffer.substr( 0, size ) ] = static_cast<entry_type>( type );
-    }
+          uint64_t size = *reinterpret_cast< uint64_t const* >( read.get() );
+          std::string found_key{ read.get() + sizeof( uint64_t ), size };
+          uint32_t type =
+            *reinterpret_cast< uint32_t const* >
+            (
+              read.get() + read.size() - sizeof( uint32_t )
+            );
 
-    file.close();
+          keys[ found_key ] = static_cast<entry_type>( type );
+        }
+      }()
+      .finally( [ & ]{ return in_sstable_stream.close(); } );
   }
 
   std::set< std::string > return_keys;
@@ -172,13 +201,11 @@ seastar::future<std::set<std::string>> sstables_t::sorted_keys()
       return_keys.insert( item.first );
   }
 
-  return seastar::make_ready_future<std::set<std::string>>( return_keys );
+  co_return return_keys;
 }
 
 seastar::future<> sstables_t::store( std::span< sstable_item_t > items )
 {
-  // TODO implement using seastar file io
-
   for( auto const& item : items )
   {
     if( item.value != std::nullopt )
@@ -210,30 +237,42 @@ seastar::future<> sstables_t::store( std::span< sstable_item_t > items )
 
   unsigned long next = sstables_.empty() ? 0 : sstables_.back() + 1;
 
-  std::ofstream file
-  {
-    base_path_ / std::to_string( next ),
-    std::ios::binary | std::ios::trunc
-  };
+  auto out_ss_table_file =
+    co_await seastar::open_file_dma
+    (
+      ( base_path_ / std::to_string( next ) ).native(),
+      seastar::open_flags::wo | seastar::open_flags::create | seastar::open_flags::truncate
+    );
+  auto out_sstable_stream = co_await seastar::make_file_output_stream( out_ss_table_file );
 
-  for( auto const& item : items )
-  {
-    std::string fill( 256 - item.key.size(), ' ' );
+  co_await
+    [&] -> seastar::future<>
+    {
+      for( auto const& item : items )
+      {
+        std::string fill( 256 - item.key.size(), ' ' );
 
-    uint32_t type =
-      static_cast<uint32_t>(
-        item.value == std::nullopt ?
-        entry_type::tombstone :
-        entry_type::value );
+        uint32_t type =
+          static_cast<uint32_t>(
+            item.value == std::nullopt ?
+            entry_type::tombstone :
+            entry_type::value );
 
-    uint64_t size = item.key.size();
-    file.write( reinterpret_cast<const char*>(&size), sizeof( size ) );
-    file.write( item.key.c_str(), size );
-    file.write( fill.c_str(), 256 - item.key.size() );
-    file.write( reinterpret_cast<const char*>(&type), sizeof( type ) );
-  }
+        uint64_t size = item.key.size();
 
-  file.close();
+        co_await out_sstable_stream.write( reinterpret_cast<const char*>(&size), sizeof( size ) );
+        co_await out_sstable_stream.write( item.key.c_str(), size );
+        co_await out_sstable_stream.write( fill.c_str(), 256 - item.key.size() );
+        co_await out_sstable_stream.write( reinterpret_cast<const char*>(&type), sizeof( type ) );
+      }
+    }()
+    .finally(
+      seastar::coroutine::lambda(
+        [ & ] -> seastar::future<>
+        {
+          co_await out_sstable_stream.flush();
+          co_await out_sstable_stream.close();
+        }));
 
   sstables_.push_back( next );
 }
