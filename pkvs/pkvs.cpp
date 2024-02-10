@@ -154,6 +154,8 @@ seastar::future<> pkvs_t::housekeeping()
     {
       auto& index = memtable_.get< last_accessed_index >();
 
+      assert( index.begin() != index.end() );
+
       auto first = index.begin();
 
       approximate_memtable_memory_footprint_ -= first->key.size() + first->content.size();

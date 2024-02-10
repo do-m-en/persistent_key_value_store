@@ -41,7 +41,7 @@ namespace pkvs
   private:
     memtable_t memtable_;
     size_t memtable_memory_footprint_eviction_threshold_;
-    size_t approximate_memtable_memory_footprint_; // in bytes
+    size_t approximate_memtable_memory_footprint_ = 0; // in bytes
     std::chrono::time_point<std::chrono::system_clock> last_persist_time_;
     bool has_dirty_ = false;
     sstables_t sstables_;

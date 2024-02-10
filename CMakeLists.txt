@@ -52,6 +52,7 @@ foreach(
   delete
   delete_non_existing
   persistency_test_shard_count_change
+  run_on_all_cores
   sorted_keys
   sorted_keys_after_delete
   sorted_keys_empty
