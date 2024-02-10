@@ -11,12 +11,6 @@
 
 using namespace pkvs;
 
-enum class entry_type
-{
-  tombstone,
-  value
-};
-
 namespace
 {
   std::string file_name_from_key( std::string_view key )
@@ -29,6 +23,12 @@ namespace
 
     return std::to_string( hash ) + '_' + std::to_string( reverse_hash );
   }
+
+  enum class entry_type
+  {
+    tombstone,
+    value
+  };
 
   constexpr size_t entry_size = sizeof( uint64_t ) + 256 + sizeof( uint32_t );
 }
