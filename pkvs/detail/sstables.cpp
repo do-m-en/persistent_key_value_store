@@ -183,13 +183,28 @@ seastar::future<> sstables_t::store( std::span< sstable_item_t > items )
   {
     if( item.value != std::nullopt )
     {
-      std::ofstream file
-      {
-        base_path_ / "values" / file_name_from_key( item.key ),
-        std::ios::trunc
-      };
-      file << item.value.value();
-      file.close();
+      auto out_file =
+        co_await seastar::open_file_dma
+        (
+          ( base_path_ / "values" / file_name_from_key( item.key ) ).native(),
+          seastar::open_flags::wo | seastar::open_flags::create | seastar::open_flags::truncate
+        );
+      auto out_stream = co_await seastar::make_file_output_stream( out_file );
+
+      co_await
+        [&] -> seastar::future<>
+        {
+          auto const& value = item.value.value();
+
+          co_await out_stream.write( value.data(), value.size() );
+        }()
+        .finally(
+          seastar::coroutine::lambda(
+            [ & ] -> seastar::future<>
+            {
+              co_await out_stream.flush();
+              co_await out_stream.close();
+            }));
     }
   }
 
@@ -221,8 +236,6 @@ seastar::future<> sstables_t::store( std::span< sstable_item_t > items )
   file.close();
 
   sstables_.push_back( next );
-
-  return seastar::make_ready_future<>();
 }
 
 seastar::future<> sstables_t::try_merge_oldest()
