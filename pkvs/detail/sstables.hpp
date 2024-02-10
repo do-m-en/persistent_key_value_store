@@ -24,7 +24,7 @@ namespace pkvs
   class sstables_t
   {
   public:
-    sstables_t( std::filesystem::path base_path );
+    static seastar::future<sstables_t> make( std::filesystem::path base_path );
 
     // contract: assert( key.empty() == false && key.size() < 256 );
     seastar::future<std::optional<std::string>> get_item( std::string_view key );
@@ -34,6 +34,12 @@ namespace pkvs
     seastar::future<> try_merge_oldest();
 
   private:
+    sstables_t
+    (
+      std::filesystem::path base_path,
+      std::vector<unsigned long>&& sstables
+    );
+
     std::filesystem::path base_path_;
     std::vector<unsigned long> sstables_;
   };

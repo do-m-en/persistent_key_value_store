@@ -10,17 +10,42 @@
 
 using namespace pkvs;
 
-pkvs_t::pkvs_t( size_t instance_no, size_t memtable_memory_footprint_eviction_threshold )
-  : memtable_memory_footprint_eviction_threshold_{ memtable_memory_footprint_eviction_threshold }
+seastar::future< pkvs_t > pkvs_t::make
+(
+  size_t instance_no,
+  size_t memtable_memory_footprint_eviction_threshold
+)
+{
+  co_return
+    pkvs_t
+    {
+      instance_no,
+      memtable_memory_footprint_eviction_threshold,
+      co_await
+        sstables_t::make
+        (
+          std::filesystem::current_path() / "pkvs_data" / std::to_string( instance_no )
+        )
+    };
+}
+
+pkvs_t::pkvs_t
+(
+  size_t instance_no,
+  size_t memtable_memory_footprint_eviction_threshold,
+  sstables_t&& sstables_
+)
+  : memtable_{ std::make_unique< memtable_t >() }
+  , memtable_memory_footprint_eviction_threshold_{ memtable_memory_footprint_eviction_threshold }
   , last_persist_time_{ std::chrono::system_clock::now() }
-  , sstables_{ std::filesystem::current_path() / "pkvs_data" / std::to_string( instance_no ) }
+  , sstables_{ std::forward< sstables_t >( sstables_ ) }
 {}
 
 seastar::future<std::optional<std::string>> pkvs_t::get_item( std::string_view key )
 {
   assert( key.empty() == false && key.size() < 256 );
 
-  auto& index = memtable_.get< key_index >();
+  auto& index = memtable_->get< key_index >();
 
   if
   (
@@ -38,7 +63,7 @@ seastar::future<std::optional<std::string>> pkvs_t::get_item( std::string_view k
 
     if( item != std::nullopt )
     {
-      auto& index = memtable_.get< key_index >();
+      auto& index = memtable_->get< key_index >();
 
       index.insert( entry_t{ key, item.value(), false } );
       approximate_memtable_memory_footprint_ += key.size() + item.value().size();
@@ -56,7 +81,7 @@ seastar::future<> pkvs_t::insert_item( std::string_view key, std::string_view va
 
   has_dirty_ = true;
 
-  auto& index = memtable_.get< key_index >();
+  auto& index = memtable_->get< key_index >();
 
   if( auto found = index.find( entry_t{ key } ); found != index.end() )
   {
@@ -80,7 +105,7 @@ seastar::future<> pkvs_t::delete_item( std::string_view key )
 
   has_dirty_ = true;
 
-  auto& index = memtable_.get< key_index >();
+  auto& index = memtable_->get< key_index >();
 
   if( auto found = index.find( entry_t{ key } ); found != index.end() )
   {
@@ -103,7 +128,7 @@ seastar::future<std::set<std::string>> pkvs_t::sorted_keys()
   //       prevent the race... introduce semaphor or something
   std::set<std::string> keys = co_await sstables_.sorted_keys();
 
-  for( auto const& item : memtable_.get< key_index >() )
+  for( auto const& item : memtable_->get< key_index >() )
   {
     if( item.type == entry_type_t::tombstone )
       keys.erase( item.key );
@@ -128,7 +153,7 @@ seastar::future<> pkvs_t::housekeeping()
     {
       std::vector<sstable_item_t> items;
 
-      auto& index = memtable_.get< key_index >();
+      auto& index = memtable_->get< key_index >();
 
       for( auto it = index.begin(); it != index.end(); ++it )
       {
@@ -152,7 +177,7 @@ seastar::future<> pkvs_t::housekeeping()
 
     while( approximate_memtable_memory_footprint_ > memtable_memory_footprint_eviction_threshold_ )
     {
-      auto& index = memtable_.get< last_accessed_index >();
+      auto& index = memtable_->get< last_accessed_index >();
 
       assert( index.begin() != index.end() );
 
@@ -160,7 +185,7 @@ seastar::future<> pkvs_t::housekeeping()
 
       approximate_memtable_memory_footprint_ -= first->key.size() + first->content.size();
 
-      memtable_.erase( memtable_.iterator_to( *first ) );
+      memtable_->erase( memtable_->iterator_to( *first ) );
     }
   }
 }

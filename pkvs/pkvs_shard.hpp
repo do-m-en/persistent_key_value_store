@@ -47,10 +47,8 @@ namespace pkvs
         i += seastar::smp::count
       )
       {
-        instances_.push_back( pkvs_t{ i, memtable_memory_footprint_eviction_threshold } );
+        instances_.push_back( co_await pkvs_t::make( i, memtable_memory_footprint_eviction_threshold ) );
       }
-
-      return seastar::make_ready_future<>();
     }
 
     seastar::future<> stop()

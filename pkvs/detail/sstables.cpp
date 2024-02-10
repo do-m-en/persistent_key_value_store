@@ -39,12 +39,13 @@ namespace
   constexpr size_t entry_size = sizeof( uint64_t ) + 256 + sizeof( uint32_t );
 }
 
-sstables_t::sstables_t( std::filesystem::path base_path )
-  : base_path_{ base_path / "sstables" }
+seastar::future<sstables_t> sstables_t::make( std::filesystem::path base_path )
 {
-  std::filesystem::create_directories( base_path_ / "values" );
+  auto path = base_path / "sstables";
+  std::filesystem::create_directories( path / "values" );
+  std::vector<unsigned long> sstables;
 
-  for( auto const& entry : std::filesystem::directory_iterator( base_path_) )
+  for( auto const& entry : std::filesystem::directory_iterator( path) )
   {
     // skip values directory
     // TODO assert that it's the expected directory named "values"
@@ -52,11 +53,22 @@ sstables_t::sstables_t( std::filesystem::path base_path )
       continue;
 
     // TODO check for files corrutption and if there are unexpected files/directories present
-    sstables_.push_back( std::stoul( entry.path().stem() ) );
+    sstables.push_back( std::stoul( entry.path().stem() ) );
   }
 
-  std::ranges::sort( sstables_ );
+  std::ranges::sort( sstables );
+
+  return seastar::make_ready_future<sstables_t>( sstables_t{ path, std::move( sstables ) } );
 }
+
+sstables_t::sstables_t
+(
+  std::filesystem::path base_path,
+  std::vector<unsigned long>&& sstables
+)
+  : base_path_{ base_path }
+  , sstables_{ std::forward< std::vector<unsigned long> >( sstables) }
+{}
 
 seastar::future<std::optional<std::string>> sstables_t::get_item( std::string_view key )
 {
