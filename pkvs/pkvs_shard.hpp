@@ -96,7 +96,7 @@ namespace pkvs
   private:
     size_t key_to_index( std::string_view key ) const
     {
-      size_t index = ( key_to_segment_no( key ) + 1 ) / seastar::smp::count;
+      size_t index = key_to_segment_no( key ) / seastar::smp::count;
 
       assert( index < instances_.size() );
 

@@ -48,6 +48,7 @@ foreach(
   add_value_missing
   delete
   delete_non_existing
+  persistency_test_shard_count_change
   sorted_keys
   sorted_keys_after_delete
   sorted_keys_empty
