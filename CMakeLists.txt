@@ -9,17 +9,20 @@ include( CTest )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
+set(SEASTAR_SEARCH_DIR "" CACHE PATH "Location where SeastarConfig.cmake is located.")
+set(NLOHMANN_JSON_SEARCH_DIR "" CACHE PATH "Location where nlohmann_jsonConfig.cmake is located.")
+
 find_package(
   Seastar
   REQUIRED
-  PATHS /home/domen/dev/libs/seastar/lib/cmake/Seastar
+  PATHS ${SEASTAR_SEARCH_DIR}
   NO_DEFAULT_PATH)
 
 find_package(
   nlohmann_json
   3.2.0
   REQUIRED
-  PATHS /home/domen/dev/build/nlohmann
+  PATHS ${NLOHMANN_JSON_SEARCH_DIR}
   NO_DEFAULT_PATH)
 
 add_executable(
