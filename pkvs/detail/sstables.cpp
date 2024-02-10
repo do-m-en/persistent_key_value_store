@@ -1,8 +1,13 @@
 #include "sstables.hpp"
 
+#include <seastar/core/seastar.hh>
+#include <seastar/core/fstream.hh>
+
+#include <csignal>
 #include <iostream>
 #include <map>
 #include <ranges>
+#include <span>
 
 using namespace pkvs;
 
@@ -24,6 +29,8 @@ namespace
 
     return std::to_string( hash ) + '_' + std::to_string( reverse_hash );
   }
+
+  constexpr size_t entry_size = sizeof( uint64_t ) + 256 + sizeof( uint32_t );
 }
 
 sstables_t::sstables_t( std::filesystem::path base_path )
@@ -51,35 +58,54 @@ seastar::future<std::optional<std::string>> sstables_t::get_item( std::string_vi
 
   for( bool found = false; auto current : sstables_ | std::views::reverse )
   {
-    std::ifstream file
-    {
-      base_path_ / std::to_string( current ),
-      std::ios::binary
-    };
+    auto in_ss_table_file =
+      co_await seastar::open_file_dma
+      (
+        ( base_path_ / std::to_string( current ) ).native(),
+        seastar::open_flags::ro
+      );
+    auto in_sstable_stream = seastar::make_file_input_stream( in_ss_table_file );
 
-    std::string buffer( 256, ' ' );
     uint32_t type;
 
-    file.seekg (0, std::ios::end);
-    auto length = file.tellg();
-    file.seekg (0, std::ios::beg);
-
-    while( file.tellg() < length )
-    {
-      uint64_t size;
-      file.read( reinterpret_cast<char*>( &size ), sizeof( size ) );
-      file.read( buffer.data(), 256 );
-      file.read( reinterpret_cast<char*>( &type ), sizeof( type ) );
-
-      if( buffer.substr( 0, size ) == key )
+    co_await
+      [ & ] -> seastar::future<>
       {
-        found = true;
+        while( true )
+        {
+          auto read = co_await in_sstable_stream.read_up_to( entry_size );
 
-        break;
-      }
-    }
+          if( read.size() == 0 )
+            co_return;
+          else if( read.size() != entry_size )
+          {
+            std::raise( SIGKILL );
 
-    file.close();
+            throw
+              std::runtime_error
+              (
+                "sstables file corruption detected in " +
+                ( base_path_ / std::to_string( current ) ).native()
+              );
+          }
+
+          uint64_t size = *reinterpret_cast< uint64_t const* >( read.get() );
+          std::string_view found_key{ read.get() + sizeof( uint64_t ), size };
+
+          if( found_key == key )
+          {
+            type =
+              *reinterpret_cast< uint32_t const* >
+              (
+                read.get() + read.size() - sizeof( uint32_t )
+              );
+            found = true;
+
+            co_return;
+          }
+        }
+      }()
+      .finally( [ & ]{ return in_sstable_stream.close(); } );
 
     if( found )
     {
@@ -92,16 +118,16 @@ seastar::future<std::optional<std::string>> sstables_t::get_item( std::string_vi
       };
       value_file.seekg(0, std::ios::end);
       size_t size = value_file.tellg();
-      std::string buffer(size, ' ');
+      std::optional<std::string> buffer{ std::string( size, ' ' ) };
       value_file.seekg(0);
-      value_file.read(buffer.data(), size);
+      value_file.read(buffer.value().data(), size);
       value_file.close();
 
-      return seastar::make_ready_future<std::optional<std::string>>( std::move( buffer ) );
+      co_return buffer;
     }
   }
 
-  return seastar::make_ready_future<std::optional<std::string>>();
+  co_return std::nullopt;
 }
 
 seastar::future<std::set<std::string>> sstables_t::sorted_keys()
