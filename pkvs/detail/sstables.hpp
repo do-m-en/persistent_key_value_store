@@ -1,3 +1,8 @@
+//  Copyright 2024 Domen Vrankar
+//
+//  Distributed under the Boost Software License, Version 1.0.
+//  See http://www.boost.org/LICENSE_1_0.txt
+
 #ifndef SSTABLES_HPP_INCLUDED
 #define SSTABLES_HPP_INCLUDED
 

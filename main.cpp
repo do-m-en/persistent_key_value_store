@@ -1,3 +1,8 @@
+//  Copyright 2024 Domen Vrankar
+//
+//  Distributed under the Boost Software License, Version 1.0.
+//  See http://www.boost.org/LICENSE_1_0.txt
+
 #include <seastar/core/app-template.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/reactor.hh> // seastar::condition_variable
