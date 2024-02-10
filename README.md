@@ -1,11 +1,19 @@
-Dependencies:
+## About:
+
+Experimental implementation of a persistent key-value store written with
+Seastar library.
+
+## Dependencies:
+
 Seastar
 nlohmann_json
 
-Test dependencies:
+## Test dependencies:
+
 curl
 
-TODO:
+## TODO:
+
 cmake integration tests for --memory_threshold 1 to test persistent store
 cmake unit tests for sstables (and the rest...)
 rest of LSM tree support (compaction, bloom filters)
