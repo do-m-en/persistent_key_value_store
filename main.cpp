@@ -291,27 +291,35 @@ namespace
     co_await http_server.listen(seastar::ipv4_addr("0.0.0.0", port));
     std::cout << "listening\n";
 
-    while( signal.stopping() == false )
-    {
-      co_await seastar::sleep( std::chrono::seconds( 1 ) );
-
-      co_await seastar::coroutine::parallel_for_each(
-        std::views::iota( 0u, seastar::smp::count ),
-        [ &store ]( size_t shard_no ) -> seastar::future<>
+    co_await
+      [&] -> seastar::future<>
+      {
+        while( signal.stopping() == false )
         {
-          co_await
-            store.invoke_on(
-              shard_no,
-              []( pkvs::pkvs_shard& local_shard )
-              {
-                return local_shard.housekeeping();
-              });
-        });
-    }
+          co_await seastar::sleep( std::chrono::seconds( 1 ) );
 
-    std::cout << "shutting down\n";
-    co_await http_server.stop(); // TODO RAII
-    co_await store.stop(); // TODO RAII
+          co_await seastar::coroutine::parallel_for_each(
+            std::views::iota( 0u, seastar::smp::count ),
+            [ &store ]( size_t shard_no ) -> seastar::future<>
+            {
+              co_await
+                store.invoke_on(
+                  shard_no,
+                  []( pkvs::pkvs_shard& local_shard )
+                  {
+                    return local_shard.housekeeping();
+                  });
+            });
+        }
+      }()
+      .finally(
+        seastar::coroutine::lambda(
+          [&] -> seastar::future<>
+          {
+            std::cout << "shutting down\n";
+            co_await http_server.stop();
+            co_await store.stop();
+          }));
   }
 }
 
