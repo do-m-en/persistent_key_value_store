@@ -44,26 +44,37 @@ seastar::future<sstables_t> sstables_t::make( std::filesystem::path base_path )
   auto path = base_path / "sstables";
   auto values_dir = path / "values";
 
+  bool sstables_dir_existed_before = true;
+
   if( co_await seastar::file_exists( path.native() ) == false )
+  {
+    sstables_dir_existed_before = false;
     co_await seastar::make_directory( path.native() );
+  }
 
   if( co_await seastar::file_exists( values_dir.native() ) == false )
     co_await seastar::make_directory( values_dir.native() );
 
   std::vector<unsigned long> sstables;
 
-  for( auto const& entry : std::filesystem::directory_iterator( path) )
+  if( sstables_dir_existed_before )
   {
-    // skip values directory
-    // TODO assert that it's the expected directory named "values"
-    if( entry.is_directory() )
-      continue;
+    auto dir = co_await seastar::open_directory( path.native() );
+    auto lister = dir.experimental_list_directory();
 
-    // TODO check for files corrutption and if there are unexpected files/directories present
-    sstables.push_back( std::stoul( entry.path().stem() ) );
+    co_await
+      [&] -> seastar::future<>
+      {
+        while( auto de = co_await lister() )
+        {
+          if( de->name != "values")
+            sstables.push_back( std::stoul( de->name ) ); // assuming directory is not poluted by an external entity
+        }
+      }()
+      .finally( [&]{ return dir.close(); } );
+
+    std::ranges::sort( sstables );
   }
-
-  std::ranges::sort( sstables );
 
   co_return sstables_t{ path, std::move( sstables ) };
 }
