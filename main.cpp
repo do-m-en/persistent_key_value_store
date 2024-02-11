@@ -84,6 +84,13 @@ namespace
     co_await
       [&] -> seastar::future<>
       {
+        {
+          auto root_pksv_data_dir = std::filesystem::current_path() / "pkvs_data";
+
+          if( co_await seastar::file_exists( root_pksv_data_dir.native() ) == false )
+            co_await seastar::make_directory( root_pksv_data_dir.native() );
+        }
+
         co_await store.invoke_on_all(
           [ memtable_memory_footprint_eviction_threshold ]( pkvs::pkvs_shard& local_shard )
           {

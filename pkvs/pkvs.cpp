@@ -5,6 +5,8 @@
 
 #include "pkvs.hpp"
 
+#include <seastar/core/seastar.hh>
+
 #include <cassert>
 #include <filesystem>
 
@@ -16,16 +18,18 @@ seastar::future< pkvs_t > pkvs_t::make
   size_t memtable_memory_footprint_eviction_threshold
 )
 {
+  auto root_pksv_data_dir = std::filesystem::current_path() / "pkvs_data";
+  auto root_instance_dir = root_pksv_data_dir / std::to_string( instance_no );
+
+  if( co_await seastar::file_exists( root_instance_dir.native() ) == false )
+    co_await seastar::make_directory( root_instance_dir.native() );
+
   co_return
     pkvs_t
     {
       instance_no,
       memtable_memory_footprint_eviction_threshold,
-      co_await
-        sstables_t::make
-        (
-          std::filesystem::current_path() / "pkvs_data" / std::to_string( instance_no )
-        )
+      co_await sstables_t::make( root_instance_dir )
     };
 }
 

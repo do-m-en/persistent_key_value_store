@@ -42,7 +42,14 @@ namespace
 seastar::future<sstables_t> sstables_t::make( std::filesystem::path base_path )
 {
   auto path = base_path / "sstables";
-  std::filesystem::create_directories( path / "values" );
+  auto values_dir = path / "values";
+
+  if( co_await seastar::file_exists( path.native() ) == false )
+    co_await seastar::make_directory( path.native() );
+
+  if( co_await seastar::file_exists( values_dir.native() ) == false )
+    co_await seastar::make_directory( values_dir.native() );
+
   std::vector<unsigned long> sstables;
 
   for( auto const& entry : std::filesystem::directory_iterator( path) )
@@ -58,7 +65,7 @@ seastar::future<sstables_t> sstables_t::make( std::filesystem::path base_path )
 
   std::ranges::sort( sstables );
 
-  return seastar::make_ready_future<sstables_t>( sstables_t{ path, std::move( sstables ) } );
+  co_return sstables_t{ path, std::move( sstables ) };
 }
 
 sstables_t::sstables_t
