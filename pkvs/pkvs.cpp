@@ -79,7 +79,7 @@ seastar::future<std::optional<std::string>> pkvs_t::get_item( std::string_view k
   co_return std::nullopt;
 }
 
-seastar::future<> pkvs_t::insert_item( std::string_view key, std::string_view value )
+void pkvs_t::insert_item( std::string_view key, std::string_view value )
 {
   assert( key.empty() == false && key.size() < 256 );
 
@@ -99,11 +99,9 @@ seastar::future<> pkvs_t::insert_item( std::string_view key, std::string_view va
   }
 
   approximate_memtable_memory_footprint_ += value.size();
-
-  return seastar::make_ready_future<>();
 }
 
-seastar::future<> pkvs_t::delete_item( std::string_view key )
+void pkvs_t::delete_item( std::string_view key )
 {
   assert( key.empty() == false && key.size() < 256 );
 
@@ -121,8 +119,6 @@ seastar::future<> pkvs_t::delete_item( std::string_view key )
     index.insert( entry_t::make_tombstone( key ) );
     approximate_memtable_memory_footprint_ += key.size();
   }
-
-  return seastar::make_ready_future<>();
 }
 
 seastar::future<std::set<std::string>> pkvs_t::sorted_keys()

@@ -61,14 +61,14 @@ namespace pkvs
       co_return co_await instances_[ key_to_index( key ) ].get_item( key );
     }
 
-    seastar::future<> insert_item( std::string_view key, std::string_view value )
+    void insert_item( std::string_view key, std::string_view value )
     {
-      co_return co_await instances_[ key_to_index( key ) ].insert_item( key, value );
+      instances_[ key_to_index( key ) ].insert_item( key, value );
     }
 
-    seastar::future<> delete_item( std::string_view key )
+    void delete_item( std::string_view key )
     {
-      co_return co_await instances_[ key_to_index( key ) ].delete_item( key );
+      instances_[ key_to_index( key ) ].delete_item( key );
     }
 
     seastar::future<std::set<std::string>> sorted_keys()

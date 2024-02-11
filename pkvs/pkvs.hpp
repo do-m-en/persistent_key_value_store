@@ -31,9 +31,9 @@ namespace pkvs
     // contract: assert( key.empty() == false && key.size() < 256 );
     seastar::future<std::optional<std::string>> get_item( std::string_view key );
     // contract: assert( key.empty() == false && key.size() < 256 );
-    seastar::future<> insert_item( std::string_view key, std::string_view value );
+    void insert_item( std::string_view key, std::string_view value );
     // contract: assert( key.empty() == false && key.size() < 256 );
-    seastar::future<> delete_item( std::string_view key );
+    void delete_item( std::string_view key );
     seastar::future<std::set<std::string>> sorted_keys();
 
     // takes care of writes of data to disk etc. and should be called periodically
