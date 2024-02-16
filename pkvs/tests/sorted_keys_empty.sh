@@ -9,7 +9,7 @@ trap "kill -9 $pid" EXIT
 
 output=`curl -i -H "Accept: application/json" -H "Content-Type: application/json" -X GET localhost:8080/sorted_keys`
 
-if ! [[ "$output" =~ "{\\\"keys\\\":[]}" ]]
+if ! [[ "$output" =~ "{\"keys\":[]}" ]]
 then
   exit 1
 fi

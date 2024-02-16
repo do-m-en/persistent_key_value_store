@@ -164,13 +164,18 @@ namespace
                   new seastar::httpd::function_handler(
                     [ &store, common_request_processing ]
                     (
-                      std::unique_ptr<seastar::http::request> req
-                    ) -> seastar::future<seastar::json::json_return_type>
+                      std::unique_ptr<seastar::http::request> req,
+                      std::unique_ptr<seastar::http::reply> rep
+                    ) -> seastar::future<std::unique_ptr<seastar::http::reply>>
                     {
                       auto processed = common_request_processing( *req, { "key" } );
 
                       if( processed.has_value() == false )
-                        co_return processed.error();
+                      {
+                        rep->_content += processed.error();
+
+                        co_return std::move( rep );
+                      }
 
                       auto const& [ data, shard_no ] = *processed;
 
@@ -187,10 +192,13 @@ namespace
                             });
 
                       if( result != std::nullopt )
-                        co_return "{\"value\":\"" + result.value() + "\"}";
+                        rep->_content += "{\"value\":\"" + result.value() + "\"}";
+                      else
+                        rep->_content += "{\"result\":\"missing\"}";
 
-                      co_return "{\"result\":\"missing\"}";
-                    }));
+                      co_return std::move( rep );
+                    },
+                    "json"));
 
                 r.add(
                   seastar::httpd::operation_type::POST,
@@ -198,13 +206,18 @@ namespace
                   new seastar::httpd::function_handler(
                     [ &store, common_request_processing ]
                     (
-                      std::unique_ptr<seastar::http::request> req
-                    ) -> seastar::future<seastar::json::json_return_type>
+                      std::unique_ptr<seastar::http::request> req,
+                      std::unique_ptr<seastar::http::reply> rep
+                    ) -> seastar::future<std::unique_ptr<seastar::http::reply>>
                     {
                       auto processed = common_request_processing( *req, { "key", "value" } );
 
                       if( processed.has_value() == false )
-                        co_return processed.error();
+                      {
+                        rep->_content += processed.error();
+
+                        co_return std::move( rep );
+                      }
 
                       auto const& [ data, shard_no ] = *processed;
 
@@ -222,8 +235,11 @@ namespace
                             return local_shard.insert_item( key, value );
                           });
 
-                      co_return "{\"result\":\"ok\"}";
-                    }));
+                      rep->_content += "{\"result\":\"ok\"}";
+
+                      co_return std::move( rep );
+                    },
+                    "json"));
 
                 r.add(
                   seastar::httpd::operation_type::POST,
@@ -231,13 +247,18 @@ namespace
                   new seastar::httpd::function_handler(
                     [ &store, common_request_processing ]
                     (
-                      std::unique_ptr<seastar::http::request> req
-                    ) -> seastar::future<seastar::json::json_return_type>
+                      std::unique_ptr<seastar::http::request> req,
+                      std::unique_ptr<seastar::http::reply> rep
+                    ) -> seastar::future<std::unique_ptr<seastar::http::reply>>
                     {
                       auto processed = common_request_processing( *req, { "key" } );
 
                       if( processed.has_value() == false )
-                        co_return processed.error();
+                      {
+                        rep->_content += processed.error();
+
+                        co_return std::move( rep );
+                      }
 
                       auto const& [ data, shard_no ] = *processed;
 
@@ -252,8 +273,11 @@ namespace
                             return local_shard.delete_item( key );
                           });
 
-                      co_return "{\"result\":\"ok\"}";
-                    }));
+                      rep->_content += "{\"result\":\"ok\"}";
+
+                      co_return std::move( rep );
+                    },
+                    "json"));
 
                 r.add(
                   seastar::httpd::operation_type::GET,
@@ -261,8 +285,9 @@ namespace
                   new seastar::httpd::function_handler(
                     [ &store, common_request_processing ]
                     (
-                      std::unique_ptr<seastar::http::request> req
-                    ) -> seastar::future<seastar::json::json_return_type>
+                      std::unique_ptr<seastar::http::request> req,
+                      std::unique_ptr<seastar::http::reply> rep
+                    ) -> seastar::future<std::unique_ptr<seastar::http::reply>>
                     {
                       std::set< std::string > keys;
 
@@ -286,7 +311,9 @@ namespace
                       {
                         std::cerr << "keys failed: " << std::current_exception() << '\n';
 
-                        co_return "{\"result\":\"internal server error\"}";
+                        rep->_content += "{\"result\":\"internal server error\"}";
+
+                        co_return std::move( rep );
                       }
 
                       std::string result{ "{\"keys\":[" };
@@ -299,8 +326,11 @@ namespace
 
                       result += "]}";
 
-                      co_return result;
-                    }));
+                      rep->_content += result;
+
+                      co_return std::move( rep );
+                    },
+                    "json"));
               });
 
         std::cout << "try listening on port " << port << '\n';

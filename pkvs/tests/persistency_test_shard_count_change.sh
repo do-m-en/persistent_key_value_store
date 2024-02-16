@@ -9,14 +9,14 @@ trap "kill -9 $pid" EXIT
 
 output=`curl -i -H "Accept: application/json" -H "Content-Type: application/json" -X POST localhost:8080/post -d "{\"key\":\"abcd\",\"value\":\"efg\"}"`
 
-if ! [[ "$output" =~ "{\\\"result\\\":\\\"ok\\\"}" ]]
+if ! [[ "$output" =~ "{\"result\":\"ok\"}" ]]
 then
   exit 1
 fi
 
 output=`curl -i -H "Accept: application/json" -H "Content-Type: application/json" -X GET localhost:8080/get -d "{\"key\":\"abcd\"}"`
 
-if ! [[ "$output" =~ "{\\\"value\\\":\\\"efg\\\"}" ]]
+if ! [[ "$output" =~ "{\"value\":\"efg\"}" ]]
 then
   exit 1
 fi
@@ -31,7 +31,7 @@ trap "kill -9 $pid" EXIT
 
 output=`curl -i -H "Accept: application/json" -H "Content-Type: application/json" -X GET localhost:8080/get -d "{\"key\":\"abcd\"}"`
 
-if ! [[ "$output" =~ "{\\\"value\\\":\\\"efg\\\"}" ]]
+if ! [[ "$output" =~ "{\"value\":\"efg\"}" ]]
 then
   echo "error: "
   echo ${output}
