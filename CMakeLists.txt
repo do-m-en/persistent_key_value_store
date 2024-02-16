@@ -17,7 +17,7 @@ set(Seastar_DIR "" CACHE PATH "Location where SeastarConfig.cmake is located.")
 set(nlohmann_json_DIR "" CACHE PATH "Location where nlohmann_jsonConfig.cmake is located.")
 
 find_package(Seastar REQUIRED)
-find_package(nlohmann_json 3.2.0 REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 add_executable(
   ${PROJECT_NAME}
